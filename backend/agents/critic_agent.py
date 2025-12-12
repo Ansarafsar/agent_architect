@@ -127,7 +127,7 @@ class ClinicalCriticAgent(BaseAgent):
             response = await self.llm.chat_json(
                 messages=messages,
                 temperature=0.4,
-                max_tokens=1500
+                max_tokens=3000
             )
             
             # Update state
