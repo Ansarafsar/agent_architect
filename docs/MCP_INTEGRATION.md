@@ -18,7 +18,7 @@ Add this to your Claude Desktop config file:
       ],
       "cwd": "C:\\Users\\ANSAR\\agent_architect",
       "env": {
-        "DATABASE_URL": "postgresql://postgres:agent123@localhost:5432/cerina_foundry",
+        "DATABASE_URL": "postgresql://postgres:agent123@postgres-db:5432/cerina_foundry",
         "OPENROUTER_API_KEY": "your_api_key_here"
       }
     }

@@ -4,7 +4,7 @@ Orchestrates multi-agent CBT protocol generation with safety checks.
 """
 from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver as PostgresSaver
 
 from backend.state.models import BlackboardState
 from backend.state.checkpointer import get_checkpointer
@@ -183,13 +183,23 @@ def create_workflow_graph(checkpointer: PostgresSaver) -> StateGraph:
     return compiled
 
 
+# Global workflow instance (cached)
+_compiled_workflow = None
+
+
 def get_workflow():
     """
     Get the compiled workflow graph with checkpointing enabled.
+    Caches the workflow to avoid recompiling on every request.
     
     Returns:
         Compiled workflow graph
     """
-    checkpointer = get_checkpointer()
-    saver = checkpointer.get_saver()
-    return create_workflow_graph(saver)
+    global _compiled_workflow
+    
+    if _compiled_workflow is not None:
+        return _compiled_workflow
+    
+    saver = get_checkpointer()
+    _compiled_workflow = create_workflow_graph(saver)
+    return _compiled_workflow

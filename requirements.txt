@@ -8,6 +8,7 @@ langgraph==0.2.70
 langchain==0.3.7
 langchain-core>=0.3.15
 langchain-openai==0.2.8
+langgraph-checkpoint-postgres>=0.2.5
 
 # Database
 psycopg2-binary==2.9.9

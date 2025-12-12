@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:agent123@localhost:5432/cerina_foundry"
+    "postgresql://postgres:agent123@postgres-db:5432/cerina_foundry"
 )
 
 # Convert to async URL if needed

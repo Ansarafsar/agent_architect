@@ -1,142 +1,102 @@
 """
-PostgreSQL checkpointer for LangGraph state persistence.
-Enables crash recovery and state resumption.
+Async-safe PostgreSQL checkpointer for LangGraph.
 """
+
 import os
+import asyncio
 from typing import Optional
-from langgraph.checkpoint.postgres import PostgresSaver
-from psycopg2.pool import SimpleConnectionPool
 from dotenv import load_dotenv
 import logging
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg_pool import AsyncConnectionPool
 
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
-# Database connection parameters
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:agent123@localhost:5432/cerina_foundry"
+    "postgresql://postgres:agent123@postgres-db:5432/cerina_foundry"
 )
 
+def _get_safe_url(url: str) -> str:
+    if "@" in url:
+        parts = url.split("@")
+        auth = parts[0].split("//")[1]
+        if ":" in auth:
+            user = auth.split(":")[0]
+            return url.replace(auth, f"{user}:****")
+    return url
 
-class CerinaCheckpointer:
+_global_saver: Optional[AsyncPostgresSaver] = None
+_saver_context = None  # Store the context manager for proper cleanup
+_init_lock = asyncio.Lock()
+
+
+async def get_checkpointer_async() -> AsyncPostgresSaver:
     """
-    Wrapper around PostgresSaver with connection management.
-    Provides checkpoint persistence for LangGraph workflows.
+    Async-safe initialization for ASGI servers.
+    Properly manages the connection pool lifecycle.
     """
-    
-    def __init__(self, connection_string: Optional[str] = None):
-        """
-        Initialize the checkpointer.
+    global _global_saver, _saver_context
+
+    if _global_saver is not None:
+        return _global_saver
+
+    async with _init_lock:
+        if _global_saver is not None:
+            return _global_saver
+
+        logger.info(f"🔧 Setting up AsyncPostgresSaver for {_get_safe_url(DATABASE_URL)}")
         
-        Args:
-            connection_string: PostgreSQL connection string. 
-                             If None, uses DATABASE_URL from environment.
-        """
-        self.connection_string = connection_string or DATABASE_URL
-        self._pool: Optional[SimpleConnectionPool] = None
-        self._saver: Optional[PostgresSaver] = None
+        # Add connection pool parameters to prevent stale connections
+        # These parameters enable TCP keepalive to detect dead connections
+        # IMPORTANT: autocommit=true is required for DDL statements (CREATE TABLE) to persist
+        conn_params = "?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5&autocommit=true"
+        db_url_with_params = DATABASE_URL + conn_params
         
-        logger.info(f"Initializing checkpointer with database: {self._get_safe_url()}")
-    
-    def _get_safe_url(self) -> str:
-        """Get connection URL with password masked for logging."""
-        url = self.connection_string
-        if "@" in url:
-            parts = url.split("@")
-            auth_part = parts[0].split("//")[1]
-            if ":" in auth_part:
-                user = auth_part.split(":")[0]
-                return url.replace(auth_part, f"{user}:****")
-        return url
-    
-    def setup(self) -> PostgresSaver:
-        """
-        Set up the PostgreSQL connection pool and saver.
+        # Create the context manager with the connection string
+        _saver_context = AsyncPostgresSaver.from_conn_string(db_url_with_params)
         
-        Returns:
-            PostgresSaver instance ready for use with LangGraph
-        """
+        # Manually enter the context (opens connection pool) but never exit it
+        # This keeps the pool alive for the application's lifetime
+        saver = await _saver_context.__aenter__()
+        
+        # Setup the database tables
+        logger.info("📋 Creating checkpoint tables...")
         try:
-            # Create connection pool
-            self._pool = SimpleConnectionPool(
-                minconn=1,
-                maxconn=10,
-                dsn=self.connection_string
-            )
-            
-            logger.info("Connection pool created successfully")
-            
-            # Create PostgresSaver from connection string
-            self._saver = PostgresSaver.from_conn_string(self.connection_string)
-            
-            # Initialize checkpoint tables
-            self._saver.setup()
-            
-            logger.info("✅ PostgresSaver initialized and ready")
-            
-            return self._saver
-            
+            await saver.setup()
+            logger.info("✅ Checkpoint tables created successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to initialize checkpointer: {e}")
+            logger.error(f"❌ Error during setup(): {e}", exc_info=True)
             raise
-    
-    def get_saver(self) -> PostgresSaver:
-        """
-        Get the PostgresSaver instance.
         
-        Returns:
-            PostgresSaver instance
-            
-        Raises:
-            RuntimeError: If setup() hasn't been called
-        """
-        if self._saver is None:
-            raise RuntimeError(
-                "Checkpointer not initialized. Call setup() first."
-            )
-        return self._saver
-    
-    def close(self):
-        """Close all connections and cleanup."""
-        if self._pool:
-            self._pool.closeall()
-            logger.info("Connection pool closed")
-        
-        self._pool = None
-        self._saver = None
+        logger.info("✅ AsyncPostgresSaver ready with connection pooling")
+        _global_saver = saver
+        return _global_saver
 
 
-# Global checkpointer instance
-_global_checkpointer: Optional[CerinaCheckpointer] = None
-
-
-def get_checkpointer(force_new: bool = False) -> CerinaCheckpointer:
+def get_checkpointer():
     """
-    Get the global checkpointer instance.
-    
-    Args:
-        force_new: If True, creates a new instance even if one exists
-        
-    Returns:
-        CerinaCheckpointer instance
+    Return the global saver.
+    This MUST NOT run async setup. Lifespan must initialize it first.
     """
-    global _global_checkpointer
-    
-    if _global_checkpointer is None or force_new:
-        _global_checkpointer = CerinaCheckpointer()
-        _global_checkpointer.setup()
-    
-    return _global_checkpointer
+    if _global_saver is None:
+        raise RuntimeError("Checkpointer not initialized. Call get_checkpointer_async() at startup.")
+    return _global_saver
 
 
-def reset_checkpointer():
-    """Reset the global checkpointer instance."""
-    global _global_checkpointer
+async def reset_checkpointer():
+    """Reset the global checkpointer and properly close connections."""
+    global _global_saver, _saver_context
     
-    if _global_checkpointer:
-        _global_checkpointer.close()
-        _global_checkpointer = None
+    if _saver_context is not None:
+        try:
+            # Properly exit the context manager to close the connection pool
+            await _saver_context.__aexit__(None, None, None)
+            logger.info("♻️ Connection pool closed")
+        except Exception as e:
+            logger.warning(f"Error closing connection pool: {e}")
     
-    logger.info("Checkpointer reset")
+    _global_saver = None
+    _saver_context = None
+    logger.info("♻️ Checkpointer reset")

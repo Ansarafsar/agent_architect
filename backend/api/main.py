@@ -13,7 +13,7 @@ import logging
 from typing import Optional
 
 from backend.state.models import BlackboardState, WorkflowInput, WorkflowOutput, ProtocolDraft
-from backend.state.checkpointer import get_checkpointer, reset_checkpointer
+from backend.state.checkpointer import get_checkpointer, get_checkpointer_async, reset_checkpointer
 from backend.graph import get_workflow
 from backend.db import init_db, close_db
 
@@ -35,7 +35,11 @@ async def lifespan(app: FastAPI):
     await init_db()
     
     # Initialize checkpointer
-    get_checkpointer()
+    await get_checkpointer_async()
+    
+    # Initialize workflow graph (compile once and cache)
+    logger.info("📊 Initializing workflow graph...")
+    get_workflow()
     
     logger.info("✅ API ready!")
     
@@ -44,7 +48,7 @@ async def lifespan(app: FastAPI):
     # Cleanup
     logger.info("Shutting down...")
     await close_db()
-    reset_checkpointer()
+    await reset_checkpointer()
     logger.info("✅ Shutdown complete")
 
 

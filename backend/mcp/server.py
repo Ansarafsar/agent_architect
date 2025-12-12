@@ -173,17 +173,26 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
 
 async def main():
-    """Run the MCP server."""
+    """Run the MCP server over stdio, keep container alive."""
     from mcp.server.stdio import stdio_server
-    
-    logger.info("🚀 Starting Cerina Foundry MCP Server...")
-    
-    async with stdio_server() as (read_stream, write_stream):
-        await mcp_server.run(
-            read_stream,
-            write_stream,
-            mcp_server.create_initialization_options()
-        )
+
+    logger.info("🚀 Starting Cerina Foundry MCP Server (STDIO mode)...")
+
+    while True:
+        try:
+            async with stdio_server() as (read_stream, write_stream):
+                await mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    mcp_server.create_initialization_options()
+                )
+        except Exception as e:
+            logger.error(f"❌ MCP server crashed: {e}")
+
+        # Prevent container exit
+        await asyncio.sleep(1)
+
+
 
 
 if __name__ == "__main__":
