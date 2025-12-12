@@ -50,8 +50,7 @@ async def get_checkpointer_async() -> AsyncPostgresSaver:
         
         # Add connection pool parameters to prevent stale connections
         # These parameters enable TCP keepalive to detect dead connections
-        # IMPORTANT: autocommit=true is required for DDL statements (CREATE TABLE) to persist
-        conn_params = "?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5&autocommit=true"
+        conn_params = "?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5"
         db_url_with_params = DATABASE_URL + conn_params
         
         # Create the context manager with the connection string
@@ -62,13 +61,8 @@ async def get_checkpointer_async() -> AsyncPostgresSaver:
         saver = await _saver_context.__aenter__()
         
         # Setup the database tables
-        logger.info("📋 Creating checkpoint tables...")
-        try:
-            await saver.setup()
-            logger.info("✅ Checkpoint tables created successfully")
-        except Exception as e:
-            logger.error(f"❌ Error during setup(): {e}", exc_info=True)
-            raise
+        # Note: We've manually verified tables exist, but setup() is safe to run
+        await saver.setup()
         
         logger.info("✅ AsyncPostgresSaver ready with connection pooling")
         _global_saver = saver

@@ -83,11 +83,14 @@ class LLMClient:
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
                 
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error during LLM call: {e.response.status_code} - {e.response.text}")
+            raise
         except httpx.HTTPError as e:
-            logger.error(f"HTTP error during LLM call: {e}")
+            logger.error(f"HTTP connection error: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error during LLM call: {e}")
+            logger.error(f"Unexpected error during LLM call: {e}")
             raise
     
     async def chat_json(

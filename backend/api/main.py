@@ -111,7 +111,11 @@ async def run_workflow(input_data: WorkflowInput):
         workflow = get_workflow()
         
         # Run workflow
-        config = {"configurable": {"thread_id": thread_id}}
+        # Set recursion_limit to 50 to allow for multiple revision cycles (each cycle is ~5 steps)
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 50
+        }
         
         # Invoke the workflow
         final_state = await workflow.ainvoke(
@@ -239,7 +243,10 @@ async def approve_and_resume(thread_id: str, feedback: Optional[str] = None):
     
     try:
         workflow = get_workflow()
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 50
+        }
         
         # Get current state
         state_snapshot = await workflow.aget_state(config)
