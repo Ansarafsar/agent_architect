@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cerina-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:agent123@postgres-db:5432/cerina_foundry
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-2.0-flash-exp:free}
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+    networks:
+      - agent-net
+    restart: unless-stopped
+    command: uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cerina-mcp
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:agent123@postgres-db:5432/cerina_foundry
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-2.0-flash-exp:free}
+    volumes:
+      - ./backend:/app/backend
+    networks:
+      - agent-net
+    restart: unless-stopped
+    command: python -m backend.mcp.server
+
+networks:
+  agent-net:
+    external: true
+    name: agent-net
