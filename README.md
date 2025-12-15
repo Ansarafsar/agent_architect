@@ -1,4 +1,4 @@
-**An AI-powered multi-agent system for generating safe and empathetic CBT (Cognitive Behavioral Therapy) protocols using LangGraph, FastAPI, React, and MCP.**
+# **An AI-powered multi-agent system for generating safe and empathetic CBT (Cognitive Behavioral Therapy) protocols using LangGraph, FastAPI, React, and MCP.**
 
 ---
 
