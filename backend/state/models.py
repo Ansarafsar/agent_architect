@@ -3,7 +3,7 @@ Pydantic models for Cerina Protocol Foundry state management.
 Implements the blackboard state pattern for multi-agent collaboration.
 """
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
 
@@ -31,6 +31,24 @@ class ProtocolStep(BaseModel):
     exposure_level: Literal["low", "medium", "high"]
     duration: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator('exposure_level', mode='before')
+    @classmethod
+    def normalize_exposure_level(cls, v: str) -> str:
+        """Normalize exposure level from LLM output."""
+        if not isinstance(v, str):
+            return "medium"
+        v = v.lower().strip()
+        if v in ["low", "medium", "high"]:
+            return v
+        # Fuzzy matching
+        if "high" in v:
+            return "high"
+        if "medium" in v:
+            return "medium"
+        if "low" in v:
+            return "low"
+        return "medium"
 
 
 class ProtocolDraft(BaseModel):

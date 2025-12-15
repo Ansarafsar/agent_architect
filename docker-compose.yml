@@ -28,7 +28,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:agent123@postgres-db:5432/cerina_foundry
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-2.0-flash-exp:free}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-arcee-ai/trinity-mini:free}
     volumes:
       - ./backend:/app/backend
     networks:
